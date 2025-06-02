@@ -290,7 +290,7 @@ namespace
 		return true;
 	}
 
-	void capture_frame(std::vector<uint8_t>& buffer, int width, int height)
+	void capture_frame(std::vector<uint8_t>& buffer, int width, int height, int origin_x, int origin_y)
 	{
 		HRESULT hr = S_OK;
 
@@ -347,11 +347,11 @@ namespace
 			*/
 			render_cb_data.transform_matrix[0][0] = cos_r;
 			render_cb_data.transform_matrix[0][1] = -sin_r;
-			render_cb_data.transform_matrix[0][2] = static_cast<float>(x);
+			render_cb_data.transform_matrix[0][2] = static_cast<float>(x - origin_x);
 
 			render_cb_data.transform_matrix[1][0] = sin_r;
 			render_cb_data.transform_matrix[1][1] = cos_r;
-			render_cb_data.transform_matrix[1][2] = static_cast<float>(y);
+			render_cb_data.transform_matrix[1][2] = static_cast<float>(y - origin_y);
 
 			render_cb_data.transform_matrix[2][0] = 0;
 			render_cb_data.transform_matrix[2][1] = 0;
@@ -426,7 +426,7 @@ namespace
 
 		try
 		{
-			capture_frame(buffer, cx, cy);
+			capture_frame(buffer, cx, cy, x1, y1);
 		}
 		catch (std::runtime_error e)
 		{
@@ -438,7 +438,7 @@ namespace
 		HDC src = CreateCompatibleDC(hdc);
 		SelectObject(src, map);
 
-		auto result = bitblt(hdc, x, y, cx, cy, src, x1, y1, rop & ~CAPTUREBLT);
+		auto result = bitblt(hdc, x, y, cx, cy, src, 0, 0, rop & ~CAPTUREBLT);
 
 		DeleteDC(src);
 		DeleteObject(map);
