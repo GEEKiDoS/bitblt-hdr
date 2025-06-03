@@ -9,6 +9,8 @@
 #include <vector>
 #include <format>
 #include <numbers>
+#include <map>
+#include <string>
 
 #include <MinHook.h>
 
@@ -23,25 +25,34 @@ namespace
 {
 	com_ptr<ID3D11Device> device;
 	com_ptr<ID3D11DeviceContext> ctx;
-	com_ptr<ID3D11ComputeShader> render_cs;
 	com_ptr<ID3D11Texture2D> virtual_desktop_tex;
 	com_ptr<ID3D11Buffer> render_const_buffer;
+	std::map<int, com_ptr<ID3D11ComputeShader>> shader_cache;
 
 	int w = 0, h = 0;
+	int tonemapper = 0;
 
-	struct render_constant_buffer_t
+	union render_constant_buffer_t
 	{
-		float white_level = 200.0f;
-		uint32_t is_hdr = 0;
-
-		float __gap[2];
-
-		float transform_matrix[3][4];
+		struct
+		{
+			float transform_matrix[3][4];
+		};
+		struct
+		{
+			uint8_t __gap[sizeof(float) * (4 + 4 + 3)];
+			float white_level;
+		};
 	} render_cb_data;
 
 	HINSTANCE self_instance;
 
 	std::vector<std::unique_ptr<monitor>> monitors;
+
+	void load_config()
+	{
+		tonemapper = GetPrivateProfileIntA("config", "tonemapper", 3, ".\\bitblt-hdr.ini");
+	}
 
 	bool init_desktop_dup()
 	{
@@ -77,6 +88,7 @@ namespace
 			return false;
 		}
 
+		load_config();
 		return true;
 	}
 
@@ -86,7 +98,7 @@ namespace
 			monitors.clear();
 
 		com_ptr<IDXGIDevice> dxgi_device = device.as<IDXGIDevice>();
-		
+
 		if (!dxgi_device)
 			throw std::runtime_error{ "enum_monitors failed to get as IDXGIDevice" };
 
@@ -137,29 +149,84 @@ namespace
 		}
 	}
 
-	bool compile_shader()
+	com_ptr<ID3D11ComputeShader> compile_shader(bool hdr_on)
 	{
-		if (render_cs)
+#if _DEBUG
+		load_config();
+#endif
+
+		const int tonemapper_macro = hdr_on ? tonemapper : 0;
+
+		if (tonemapper_macro < 0 && tonemapper_macro > 4)
+			throw std::runtime_error{ "invalid shader combo" };
+
+		const int shader_index = hdr_on ? tonemapper + 1 : 0;
+
+		const auto iter = shader_cache.find(shader_index);
+		if (iter != shader_cache.end())
 		{
 #if _DEBUG
-			render_cs = nullptr;
+			shader_cache.erase(iter);
 #else
-			return true;
+			return iter->second;
 #endif
 		}
+			
+		std::string tonemapper_marco_str = std::to_string(tonemapper_macro);
+		D3D_SHADER_MACRO marcos[] = 
+		{
+			{ "IS_HDR", hdr_on ? "1" : "0" },
+			{ "TONEMAP_METHOD", tonemapper_marco_str.data() },
+			{ nullptr, nullptr },
+		};
 
-#if _DEBUG
 		// compile tonemapping compute shader
 		com_ptr<ID3DBlob> shader;
 		com_ptr<ID3DBlob> error;
 
+#ifdef _DEBUG
 		HRESULT hr = D3DCompileFromFile(
 			L"tonemapper.hlsl",
-			nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			marcos, D3D_COMPILE_STANDARD_FILE_INCLUDE,
 			"main", "cs_5_0",
 			D3DCOMPILE_ENABLE_STRICTNESS, 0,
 			shader, error
 		);
+#else
+		auto* const res = FindResourceA(self_instance, MAKEINTRESOURCE(TONEMAPPER_SHADER), RT_RCDATA);
+		if (!res)
+		{
+			printf("compile_shader resource not found\n");
+			return nullptr;
+		}
+
+		auto* const handle = LoadResource(self_instance, res);
+		if (!handle)
+		{
+			printf("compile_shader failed to load resource\n");
+			return nullptr;
+		}
+
+		const auto* shader_src = LockResource(handle);
+		const auto size = SizeofResource(self_instance, res);
+
+		HRESULT hr = D3DCompile(
+			shader_src, size,
+			"<TONEMAPPER SHADER>", 
+			marcos, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			"main", "cs_5_0",
+			D3DCOMPILE_ENABLE_STRICTNESS, 0,
+			shader, error
+		);
+
+		FreeResource(handle);
+
+		if (FAILED(hr))
+		{
+			printf("compile_shader failed at line %d, hr = 0x%x\n", __LINE__, hr);
+			return nullptr;
+		}
+#endif
 
 		if (error)
 		{
@@ -169,63 +236,34 @@ namespace
 		if (FAILED(hr))
 		{
 			printf("compile_shader failed at line %d, hr = 0x%x\n", __LINE__, hr);
-			return false;
+			return nullptr;
 		}
+
+		com_ptr<ID3D11ComputeShader> result_shader;
 
 		hr = device->CreateComputeShader(
 			shader->GetBufferPointer(), shader->GetBufferSize(),
-			nullptr, render_cs
+			nullptr, result_shader
 		);
 
 		if (FAILED(hr))
 		{
 			printf("compile_shader failed at line %d, hr = 0x%x\n", __LINE__, hr);
-			return false;
-		}
-#else
-		auto* const res = FindResourceA(self_instance, MAKEINTRESOURCE(TONEMAPPER_SHADER), RT_RCDATA);
-		if (!res)
-		{
-			printf("compile_shader resource not found\n");
-			return false;
+			return nullptr;
 		}
 
-		auto* const handle = LoadResource(self_instance, res);
-		if (!handle)
-		{
-			printf("compile_shader failed to load resource\n");
-			return false;
-		}
-
-		const auto* bytecode = LockResource(handle);
-		const auto size = SizeofResource(self_instance, res);
-
-		HRESULT hr = device->CreateComputeShader(
-			bytecode, size,
-			nullptr, render_cs
-		);
-
-		FreeResource(handle);
-
-		if (FAILED(hr))
-		{
-			printf("compile_shader failed at line %d, hr = 0x%x\n", __LINE__, hr);
-			return false;
-		}
-#endif
-
-		return true;
+		shader_cache.emplace(shader_index, result_shader);
+		return result_shader;
 	}
 
 	bool render(com_ptr<ID3D11Texture2D> input, com_ptr<ID3D11Texture2D> target)
 	{
-		if (!compile_shader())
-			return false;
-
 		D3D11_TEXTURE2D_DESC desc;
 		input->GetDesc(&desc);
 
-		render_cb_data.is_hdr = desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+		com_ptr<ID3D11ComputeShader> shader = compile_shader(desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT);
+		if (!shader)
+			return false;
 
 		com_ptr<ID3D11ShaderResourceView> src_srv;
 		D3D11_SHADER_RESOURCE_VIEW_DESC src_desc = {};
@@ -274,7 +312,7 @@ namespace
 		memcpy(mapped_cb.pData, &render_cb_data, sizeof(render_constant_buffer_t));
 		ctx->Unmap(render_const_buffer, 0);
 
-		ctx->CSSetShader(render_cs, nullptr, 0);
+		ctx->CSSetShader(shader, nullptr, 0);
 		ctx->CSSetShaderResources(0, 1, src_srv);
 		ctx->CSSetUnorderedAccessViews(0, 1, dest_uav, nullptr);
 		ctx->Dispatch((desc.Width + 15) / 16, (desc.Height + 15) / 16, 1);
@@ -449,10 +487,10 @@ namespace
 	void free_desktop_dup()
 	{
 		monitors.clear();
+		shader_cache.clear();
 
 		render_const_buffer = nullptr;
 		virtual_desktop_tex = nullptr;
-		render_cs = nullptr;
 		ctx = nullptr;
 		device = nullptr;
 	}
