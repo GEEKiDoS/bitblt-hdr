@@ -172,9 +172,11 @@
     <MASM Include="dllproxy\version.asm">
       <FileType>Document</FileType>
     </MASM>
+    <None Include=".clang-format" />
     <None Include="dllproxy\version.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="bitblt_hdr.cpp" />
     <ClCompile Include="deps\minhook\src\buffer.c" />
     <ClCompile Include="deps\minhook\src\hde\hde32.c" />
     <ClCompile Include="deps\minhook\src\hde\hde64.c" />
@@ -185,6 +187,7 @@
     <ClCompile Include="monitor.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bitblt_hdr.hpp" />
     <ClInclude Include="deps\minhook\include\MinHook.h" />
     <ClInclude Include="deps\minhook\src\buffer.h" />
     <ClInclude Include="deps\minhook\src\hde\hde32.h" />
