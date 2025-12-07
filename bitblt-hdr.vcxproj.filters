@@ -21,6 +21,7 @@
     <None Include="dllproxy\version.def">
       <Filter>dllproxy</Filter>
     </None>
+    <None Include=".clang-format" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -43,6 +44,7 @@
       <Filter>deps\minhook</Filter>
     </ClCompile>
     <ClCompile Include="monitor.cpp" />
+    <ClCompile Include="bitblt_hdr.cpp" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="dllproxy\version.asm">
@@ -82,6 +84,7 @@
     <ClInclude Include="utils\trampoline.hpp">
       <Filter>utils</Filter>
     </ClInclude>
+    <ClInclude Include="bitblt_hdr.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resource.rc" />
