@@ -21,13 +21,14 @@ class bitblt_hdr
   explicit bitblt_hdr(trampoline<decltype(BitBlt)> bitblt);
   ~bitblt_hdr();
 
+  void reset();
+  bool init();
   bool create_shader_from_source_file(LPCWSTR file_name);
   bool create_shader_from_resource(HINSTANCE instance, WORD res_id);
   bool is_ready() const;
   bool bitblt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop);
 
  private:
-  bool init_desktop_dup();
   void enum_monitors();
   bool render(com_ptr<ID3D11Texture2D> input, com_ptr<ID3D11Texture2D> target);
   void capture_frame(

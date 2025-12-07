@@ -15,11 +15,15 @@
 
 bitblt_hdr::bitblt_hdr(trampoline<decltype(BitBlt)> bitblt) : bitblt_(bitblt)
 {
-	init_desktop_dup();
+	init();
 }
 
 bitblt_hdr::~bitblt_hdr()
 {
+	reset();	
+}
+
+void bitblt_hdr::reset() {
 	monitors_.clear();
 
 	render_const_buffer_ = nullptr;
@@ -29,7 +33,7 @@ bitblt_hdr::~bitblt_hdr()
 	device_ = nullptr;
 }
 
-bool bitblt_hdr::init_desktop_dup()
+bool bitblt_hdr::init()
 {
 	if (device_ && ctx_)
 	{
@@ -301,7 +305,7 @@ void bitblt_hdr::capture_frame(
 {
 	HRESULT hr = S_OK;
 
-	if (width != width_ || height != height_)
+	if (width != width_ || height != height_ || monitors_.empty())
 	{
 		if (virtual_desktop_tex_)
 		{
