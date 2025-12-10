@@ -16,7 +16,7 @@ Go to [releases](https://github.com/GEEKiDoS/bitblt-hdr/releases)
     - In some version of Windows, You need to place it to `versions\<lastest version folder>` to get it working #6
 2. Tencent QQ (9.7.23, old non-NT 32bit build)
     - In order to get it working, "Override high DPI scaling behavior" must set to "Application" in Compatibility setting for QQ.exe
-3. Snipaste (2.10.6)
+3. ~~Snipaste (2.10.6)~~ Built-in since v2.11, Enable it in Options/Screenshot/Behavior
 4. Flameshot (12.1.0)
 
 ### Known Issue
